@@ -1,0 +1,189 @@
+---
+title: "Google Analytics Capstone Project"
+author: "Victor Okanda"
+date: "11/17l/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+## **Introduction**
+
+In this documentation, I give a detailed description of my process of analysis, from data collection to visualization. I am required to help **Cyclistic**, a bike-share company make an appropriate marketing strategy. In my outcome, I am to showcase the differentials in the bike use between casual riders and manual members. The datasets contain trip information for the last 12 months (NOV, 2021 to OCT, 2022. Find the link to the datasets [here](https://divvy-tripdata.s3.amazonaws.com/index.html).
+
+## **Loading of packages**
+
+Let us load the important packages that will be used for this analysis. 
+The following packages will be installed and loaded:
+
+* tidyverse
+
+* ggplot2
+* janitor
+* lubridate
+* geosphere
+* webr
+
+```{r include=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(lubridate)
+library(geosphere)
+library(webr)
+
+```
+
+## Loading the Dataset
+
+Tidyverse package will be used to combine and read all the CSV files in the folder. The following function will be used.
+
+*ride_data <-  list.files(path = "C:/Users/User/Desktop/trip_data", pattern = ".csv")%>% map_df(~read_csv(.))*
+
+```{r include=FALSE}
+
+ride_data <-  list.files(path = "C:/Users/User/Desktop/trip_data", pattern = "*.csv")%>% 
+  map_df(~read_csv(.))
+
+```
+
+
+## **EDA**
+
+Let's explore the data to learn of its structure and composition. The exploration will look at:
+
+* Column names
+* column data types
+* Check for inconsistencies
+* Check for null values, and 
+* Any other issue that needs tweaking
+
+```{r  results="markup"}
+
+summary(ride_data)
+
+sum(is.na(ride_data))
+
+```
+
+From the exploration, it can quickly be deduced that there are 5 million rows of data with 13 columns. We can also see some null values.
+
+
+## **Removing Null Values**
+
+From the exploration, there are null values in the "*start_station_name*","*end_station_name*", "*start_station_id*", and "*end_station_id*" columns. This is not ideal for a cyclist must commence a trip from a station and end at a given station. Therefore, we will remove records that have no start and end station names. 
+
+```{r results='hide'}
+df<- ride_data %>% 
+  filter(! is.na(start_station_name)) %>% 
+  filter(! is.na(end_station_name))
+
+```
+
+## **Adding Columns**
+
+Other columns will be added to the dataset to calculate *trip_duration*, *trip_distance* (using the geosphere package), *trip_year*, *trip_month*, *day_of_week*, and *hour_of_day*. Mutate function of the dplry package will be used.
+
+```{r}
+df_1 <- df %>% 
+  mutate(trip_duration = as.numeric(difftime(ended_at, started_at, units = "mins"))) %>%
+  mutate(trip_distance= distHaversine(cbind(start_lng, start_lat), cbind(end_lng, end_lat))) %>% 
+  mutate(trip_year = year(started_at)) %>% 
+  mutate(trip_month = month(started_at, label = TRUE)) %>% 
+  mutate(day_of_week = weekdays(started_at)) %>% 
+  mutate(hour_of_day = hour(started_at))
+  
+  
+```
+
+
+## **Further Cleaning**
+
+It is further realized during the exploration that some records have either zero, or negative numbers representing trip_duration and trip_distance. This is impossible since these variables must have positive values. This calls for further cleaning.  
+
+```{r}
+df_2 <- df_1 %>%
+  filter(trip_duration > 0 & trip_distance > 0)
+```
+
+## **Analysis**
+
+The analysis will discover trends on how the casual and annual members use bikes. Only few columns will be chosen for the analysis. The analysis tries to answer the following questions:
+
+* What is the average ride length for annual and casual members?
+* What is the maximum, and minimum ride lengths for the category of the customers?
+* What is the average ride length by days of week?
+* What is the number of rides for users by *day_of_week*?
+* What is the most preferred ride type?
+
+#### **Maximum, Minimum,and average ride lengths for users**
+
+
+```{r  results="markup"}
+df_2 %>% 
+  group_by(member_casual) %>% 
+  summarise(average_ride_length= mean(trip_distance),
+            max_ride_length= max(trip_distance),
+            min_ride_length= min(trip_distance)
+            )
+```
+
+## **Average ride length and number of rides by day of week**
+ From the output below, many cyclists prefer riding on Saturdays. 
+```{r  results="markup"}
+df_2 %>% 
+  group_by( day_of_week) %>% 
+  summarize(average_ride_length= mean(trip_distance),
+            number_of_rides = n()) %>% 
+  arrange(-number_of_rides)
+```
+# **The Preferred ride type**
+
+Many riders prefer classic bikes
+```{r  results="markup"}
+df_2 %>% 
+  group_by(rideable_type) %>% 
+  summarise(number_of_rides= n()) %>% 
+  arrange(-number_of_rides)
+```
+
+## **The Preferred Ride Type Among Members**
+
+Here, pie donut chart from the webr package will be used to determine how ride type is distributed among cyclists. 
+
+```{r  results="markup"}
+df_2 %>% 
+  PieDonut(aes(member_casual, rideable_type), 
+           title = "Preferred Byke Types by Members",
+           r0 = 0.45, r1 = 0.9)
+```
+
+## **Creation of a Final Dataset for Further Visualization**
+
+A summarized dataset will be created to be used for visualization in Tableau, Power BI, or any other BI tool. 
+```{r}
+final_trip_data<- df_2 %>% 
+  group_by(member_casual, 
+           rideable_type, 
+          trip_year, trip_month, 
+           day_of_week, 
+           hour_of_day) %>% 
+  summarize( number_of_rides= n(),
+             avg_ride_duration= mean(trip_duration),
+             avg_ride_distance = mean(trip_distance))
+```
+
+
+
+## **Exporting Summarized Data**##
+
+The clean summarized data is finally exported to the PC using *write_csv* for further analysis and visualization.
+
+```{r}
+write_csv(final_trip_data, 
+          "C:\\Users\\User\\Desktop\\R\\summary_data.csv",
+          append = FALSE )
+```
+
+                               *--END--*
